@@ -2,6 +2,8 @@
 
 #include "ofMain.h"
 #include "pspThread.h"
+#include "ofxAssimpModelLoader.h"
+#include "assimpThread.h"
 
 #define PICTUREAMOUNT 8
 
@@ -33,14 +35,16 @@ class ofApp : public ofBaseApp{
 		void showStatistics();
     
     
-    ofVideoGrabber  cam1, cam2;
-    ofSerial        arduino;
-    ofImage         camImage1, camImage2, GUITrain, GUIWait;
-	pspThread		photoScanThread;
-	ofTrueTypeFont	pixelFont, pixelFontLarge;
+    ofVideoGrabber			cam1, cam2;
+    ofSerial				arduino;
+    ofImage					camImage1, camImage2, GUITrain, GUIWait;
+	pspThread				photoScanThread;
+	ofTrueTypeFont			pixelFont, pixelFontLarge;
+	ofxAssimpModelLoader	currentModel;
+	assimpThread			modelLoader;
     
     int     picturesTaken;
-    bool    isScanning, photoScanFinish, isReady, isProcessing, showStats;
+    bool    isScanning, photoScanFinish, isReady, isProcessing, showStats, modelIsShowing;
     string  currentSavePath;
     
 };

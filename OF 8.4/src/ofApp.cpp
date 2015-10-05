@@ -14,7 +14,7 @@
 //------------------------------------------------------------
 void ofApp::setup(){
 	ofSetLogLevel(OF_LOG_VERBOSE);
-    ofSetFullscreen(true);
+    ofSetFullscreen(false);
     
     cam1.setVerbose(true);
     cam1.listDevices();
@@ -42,6 +42,7 @@ void ofApp::setup(){
     photoScanFinish = true;
     isReady = true;
 	showStats=true;
+	modelIsShowing = false;
     
     picturesTaken = 0;
     
@@ -95,6 +96,10 @@ void ofApp::update(){
 		}
 
 	}
+
+	if(modelIsShowing){
+		
+	}
     
 }
 
@@ -104,7 +109,7 @@ void ofApp::draw(){
     
 	if(isReady){ //Ready for action, welcome screen
 		
-		ofSetColor(255,0,250);
+		ofSetColor(255,255,255);
 		string displayString = "Druk op de knop om te scannen";
 		pixelFont.drawString(displayString,ofGetWidth()/2-(pixelFont.stringWidth(displayString)/2),ofGetHeight()-100);
 		
@@ -131,6 +136,8 @@ void ofApp::draw(){
 			ofLine(i,(ofGetHeight()/2)+2,2,i+5,(ofGetHeight()/2)+2,2);
 			ofLine(i,(ofGetHeight()/2)+4,2,i+5,(ofGetHeight()/2)+4,2);
 		}
+
+		ofSetColor(255,255,255);
 
 		string displayString = "Scannen";
 		pixelFont.drawString(displayString,ofGetWidth()/2-(pixelFont.stringWidth(displayString)/2),(ofGetHeight()/2)+80);
@@ -182,6 +189,23 @@ void ofApp::draw(){
 		displayString = "Bouwen wat ik net heb gezien";
 		pixelFont.drawString(displayString,ofGetWidth()/2-(pixelFont.stringWidth(displayString)/2),ofGetHeight()-100);
 
+	}
+	if(modelIsShowing){
+		ofEnableAlphaBlending();
+		ofEnableDepthTest();
+		
+		ofPushMatrix();
+		ofTranslate(ofGetWidth()/2,ofGetHeight()/2);
+		ofRotateY((ofGetElapsedTimeMillis()/100)%360);
+
+		ofSetColor(255,255,255,255);
+		currentModel.setPosition(0,0,0);
+		currentModel.drawFaces();
+
+		ofPopMatrix();
+
+		ofDisableDepthTest();
+		ofDisableAlphaBlending();
 	}
 
 
@@ -280,7 +304,7 @@ void ofApp::startScan(){ //start scanning
 	ofFile deleteFiles;
 	deleteFiles.removeFile("PHOTOSCAN_RESULT/result.obj");
 	deleteFiles.removeFile("PHOTOSCAN_RESULT/result.mtl");
-	deleteFiles.removeFile("PHOTOSCAN_RESULT/result.png");
+	deleteFiles.removeFile("PHOTOSCAN_RESULT/result.jpg");
 
     if(arduino.isInitialized()){
         
@@ -289,7 +313,7 @@ void ofApp::startScan(){ //start scanning
         isScanning = true;
         isReady = false;
         
-        currentSavePath = ofGetTimestampString("%d-%e--%m-%s");
+        currentSavePath = ofGetTimestampString("%d-%e--%m-%S%F");
         ofDirectory savePath(currentSavePath);
         
         if(!savePath.exists()){
@@ -355,14 +379,67 @@ void ofApp::watchPhotoscan(){ //watch for photoscan output, moving output files 
 
 	ofFile modResult("PHOTOSCAN_RESULT/result.obj");
 	modResult.copyTo("PHOTOSCAN_OUTPUT/" + currentSavePath + ".obj",true);
-	ofFile texResult("PHOTOSCAN_RESULT/result.png");
-	texResult.copyTo("PHOTOSCAN_OUTPUT/" + currentSavePath + ".png",true);
+	ofFile texResult("PHOTOSCAN_RESULT/result.jpg");
+	texResult.copyTo("PHOTOSCAN_OUTPUT/" + currentSavePath + ".jpg",true);
 	ofFile mtlResult("PHOTOSCAN_RESULT/result.mtl");
 	mtlResult.copyTo("PHOTOSCAN_OUTPUT/" + currentSavePath + ".mtl",true);
 
-	isProcessing = false;
-	isReady = true; //temp, still needs to evaluate model
+	ofBuffer mtlText = ofBufferFromFile("PHOTOSCAN_OUTPUT/" + currentSavePath + ".mtl");
+	ofBuffer mtlReplace;
 
+	string strReplace = "map_Kd result.jpg";
+	string strNewTex = "map_Kd " + currentSavePath + ".jpg";
+	string tmpRead = mtlText.getFirstLine();
+
+	while(!mtlText.isLastLine()){
+		 if(tmpRead == strReplace){
+			 mtlReplace.append(strNewTex + "\n");
+		 }
+		 else{
+			 mtlReplace.append(tmpRead+ "\n");
+		 }
+
+		 tmpRead = mtlText.getNextLine();
+	}
+
+	mtlResult.removeFile("PHOTOSCAN_OUTPUT/" + currentSavePath + ".mtl");
+	ofBufferToFile("PHOTOSCAN_OUTPUT/" + currentSavePath + ".mtl", mtlReplace);
+
+	ofBuffer modData = ofBufferFromFile("PHOTOSCAN_OUTPUT/" + currentSavePath + ".obj");
+	ofBuffer modReplace;
+
+	string strReplaceOBJ = "mtllib result.mtl";
+	string strNewMtl = "mtllib " + currentSavePath + ".mtl";
+	tmpRead = modData.getFirstLine();
+
+	int i = 0;
+
+	while(!modData.isLastLine()){
+		
+		if(tmpRead == strReplaceOBJ){
+			modReplace.append(strNewMtl + "\n");
+		}	
+		else{
+			modReplace.append(tmpRead+ "\n");
+		}
+
+		tmpRead = modData.getNextLine();
+
+		i++;
+	}
+	modReplace.append(tmpRead + "\n");
+	
+	modResult.removeFile("PHOTOSCAN_OUTPUT/" + currentSavePath + ".obj");
+	ofBufferToFile("PHOTOSCAN_OUTPUT/" + currentSavePath + ".obj", modReplace);
+	
+	
+	isProcessing = false;
+	modelIsShowing = true;
+
+	currentModel.loadModel("PHOTOSCAN_OUTPUT/" + currentSavePath + ".obj");
+	currentModel.setPosition(ofGetWidth() /2,ofGetHeight()/2,0);
+	currentModel.enableTextures();
+	currentModel.setScale(1,1,1);
 
 }
 void ofApp::moveTrain(){
@@ -410,6 +487,7 @@ void ofApp::showStatistics(){
 	ofDrawBitmapString("Current exportname: " + ofToString(currentSavePath),0,20,0);
 
 	ofDrawBitmapString("Thread running:     " + ofToString(photoScanThread.isThreadRunning()),0,40,0);
+	ofDrawBitmapString("Model Loaded?       " + ofToString(currentModel.hasMeshes()),0,50,0);
 
 	ofPopMatrix();
 }
